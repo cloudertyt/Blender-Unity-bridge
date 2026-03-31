@@ -859,6 +859,30 @@ def _ensure_timer_registered() -> None:
     _timer_registered = True
 
 
+def _auto_connect_deferred() -> None:
+    """Try to connect automatically; silently skip if bridge is not running."""
+    scene = bpy.context.scene
+    if not scene or not hasattr(scene, "mml_sync_settings"):
+        bpy.app.timers.register(_auto_connect_deferred, first_interval=1.0)
+        return
+    settings = scene.mml_sync_settings
+    ok, msg = _connect(settings)
+    settings.last_status = msg
+    if ok:
+        _set_connection_enabled(settings, True)
+        _mark_dirty()
+        _schedule_publish_from_event()
+        print(f"[Unity Connection] Auto-connected on startup: {msg}")
+    else:
+        print(f"[Unity Connection] Auto-connect skipped (bridge not running): {msg}")
+
+
+@bpy.app.handlers.persistent
+def _load_post_handler(_filepath: str) -> None:
+    """Auto-connect after Blender loads a file or starts up."""
+    bpy.app.timers.register(_auto_connect_deferred, first_interval=1.5)
+
+
 class MMLSyncSettings(PropertyGroup):
     server_url: StringProperty(  # type: ignore
         name="Server URL",
@@ -1018,7 +1042,12 @@ def register():
             funcs = bpy.types.VIEW3D_HT_header._dyn_ui_initialize()
         _view3d_header_registered = False
 
+    if _load_post_handler not in bpy.app.handlers.load_post:
+        bpy.app.handlers.load_post.append(_load_post_handler)
+
     _ensure_timer_registered()
+    # Also trigger auto-connect right now (for when the addon is enabled mid-session)
+    bpy.app.timers.register(_auto_connect_deferred, first_interval=1.5)
     print("[Unity Connection] Add-on registered.")
 
 
@@ -1026,6 +1055,8 @@ def unregister():
     global _topbar_registered, _view3d_header_registered
     if _depsgraph_update in bpy.app.handlers.depsgraph_update_post:
         bpy.app.handlers.depsgraph_update_post.remove(_depsgraph_update)
+    if _load_post_handler in bpy.app.handlers.load_post:
+        bpy.app.handlers.load_post.remove(_load_post_handler)
 
     if _topbar_registered and hasattr(bpy.types, "TOPBAR_HT_upper_bar"):
         bpy.types.TOPBAR_HT_upper_bar.remove(_draw_topbar)
