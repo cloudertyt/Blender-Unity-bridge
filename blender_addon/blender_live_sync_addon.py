@@ -966,20 +966,31 @@ class MMLSYNC_OT_sync_now(Operator):
 class MMLSYNC_OT_reconnect(Operator):
     bl_idname = "mmlsync.reconnect"
     bl_label = "Reload"
-    bl_description = "Reload and reconnect Unity bridge"
+    bl_description = "Fully reload the addon module and auto-reconnect"
 
     def execute(self, context):
-        settings = context.scene.mml_sync_settings
-        ok, msg = _connect(settings)
-        settings.last_status = msg
-        if ok:
-            _set_connection_enabled(settings, True)
-            _mark_dirty()
-            _schedule_publish_from_event()
-            self.report({"INFO"}, msg)
-            return {"FINISHED"}
-        self.report({"ERROR"}, msg)
-        return {"CANCELLED"}
+        import importlib
+        import sys
+
+        mod_name = __name__
+
+        def _deferred_reload():
+            mod = sys.modules.get(mod_name)
+            if mod is None:
+                print(f"[Unity Connection] Reload failed: module '{mod_name}' not found.")
+                return None
+            try:
+                mod.unregister()
+                importlib.reload(mod)
+                mod.register()
+                print("[Unity Connection] Addon reloaded successfully.")
+            except Exception as e:
+                print(f"[Unity Connection] Reload error: {e}")
+            return None  # run once
+
+        bpy.app.timers.register(_deferred_reload, first_interval=0.1)
+        self.report({"INFO"}, "Reloading addon…")
+        return {"FINISHED"}
 
 
 class MMLSYNC_PT_panel(Panel):
