@@ -398,6 +398,14 @@ public static class MmlBlenderLiveSyncEditor
         {
             return;
         }
+        // If the new event ID is significantly lower than what we last saw,
+        // the bridge server was restarted and its counter reset — auto-recover.
+        if (eventId < LastEventId - 50)
+        {
+            Debug.Log($"[MML Live Sync] Server restart detected (event {eventId} < last {LastEventId}), resetting LastEventId.");
+            LastEventId = 0;
+        }
+
         if (eventId <= LastEventId)
         {
             return;
