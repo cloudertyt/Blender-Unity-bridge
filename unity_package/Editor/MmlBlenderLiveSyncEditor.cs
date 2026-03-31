@@ -224,6 +224,10 @@ public static class MmlBlenderLiveSyncEditor
             return;
         }
 
+        // Continuously repaint the Scene view so geometry changes appear
+        // immediately without needing mouse input in the Scene window.
+        UnityEditor.SceneView.RepaintAll();
+
         DrainWebSocketMessages();
         UpdateWebSocketStateLog();
 
@@ -586,6 +590,10 @@ public static class MmlBlenderLiveSyncEditor
         {
             EditorSceneManager.MarkSceneDirty(activeScene);
         }
+
+        // Force Scene view to repaint immediately — without this, Unity only
+        // redraws when the mouse enters the Scene window.
+        UnityEditor.SceneView.RepaintAll();
 
         Debug.Log($"[MML Live Sync] Snapshot applied (event {GetEventId(syncEvent)}, objects {objects.Length})");
     }
