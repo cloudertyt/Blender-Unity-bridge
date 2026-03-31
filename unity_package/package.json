@@ -1,0 +1,25 @@
+{
+  "name": "com.mml.blender-live-sync",
+  "version": "0.5.0",
+  "displayName": "MML Blender Live Sync",
+  "description": "Real-time Blender to Unity live sync: streams mesh geometry and auto-generates URP HLSL shaders from Blender node graphs.",
+  "unity": "2022.3",
+  "unityRelease": "0f1",
+  "documentationUrl": "https://github.com/y-tang0320253/mml-bridge#readme",
+  "changelogUrl": "https://github.com/y-tang0320253/mml-bridge/releases",
+  "licensesUrl": "https://github.com/y-tang0320253/mml-bridge/blob/main/LICENSE",
+  "keywords": [
+    "blender",
+    "live-sync",
+    "realtime",
+    "shader-generator",
+    "urp"
+  ],
+  "author": {
+    "name": "y-tang0320253",
+    "url": "https://github.com/y-tang0320253"
+  },
+  "dependencies": {
+    "com.unity.render-pipelines.universal": "14.0.0"
+  }
+}

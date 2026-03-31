@@ -1,0 +1,18 @@
+{
+    "name": "MmlBridge.Editor",
+    "rootNamespace": "",
+    "references": [
+        "GUID:d8b63eecd4ac4a0090000000deadbeef"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
