@@ -19,6 +19,8 @@ import urllib.error
 import urllib.request
 from typing import Any
 
+import numpy as _np
+
 import bpy
 from bpy.props import BoolProperty, FloatProperty, PointerProperty, StringProperty
 from bpy.types import Operator, Panel, PropertyGroup
@@ -151,8 +153,12 @@ def _parse_url(url: str) -> tuple[str, int, str]:
 def _post_json(url: str, payload: dict[str, Any], timeout: float = 3.0) -> tuple[bool, dict[str, Any] | None, str]:
     try:
         host, port, path = _parse_url(url)
+        t0 = time.monotonic()
         body = json.dumps(payload).encode("utf-8")
+        t1 = time.monotonic()
         status, text = _http_request("POST", host, port, path, body=body, timeout=timeout)
+        t2 = time.monotonic()
+        print(f"[MML Perf]   json_encode={t1-t0:.3f}s  http_post={t2-t1:.3f}s  payload={len(body)//1024}KB")
         if status < 0:
             return False, None, "connection failed"
         data = json.loads(text) if text else {}
@@ -466,42 +472,68 @@ def _build_object_snapshot(obj: bpy.types.Object, depsgraph: bpy.types.Depsgraph
         position, rotation, scale = _matrix_to_unity_transform(obj.matrix_world)
 
         mesh.calc_loop_triangles()
-        loops = mesh.loops
-        uv_layer = mesh.uv_layers.active.data if mesh.uv_layers.active else None
 
-        vertices: list[float] = []
-        normals: list[float] = []
-        uvs: list[float] = []
-        triangles: list[int] = []
-        next_index = 0
+        n_loops   = len(mesh.loops)
+        n_tris    = len(mesh.loop_triangles)
+        n_verts   = len(mesh.vertices)
+        n_corners = n_tris * 3
 
-        for tri in mesh.loop_triangles:
-            split_normals = tri.split_normals if hasattr(tri, "split_normals") else ()
-            tri_indices: list[int] = []
-            for i, loop_index in enumerate(tri.loops):
-                loop = loops[loop_index]
-                v = mesh.vertices[loop.vertex_index].co
-                vx, vy, vz = _map_xyz(v[0], v[1], v[2])
-                vertices.extend((vx, vy, vz))
+        # ── Positions (always available) ──
+        vco = _np.empty(n_verts * 3, dtype=_np.float32)
+        mesh.vertices.foreach_get("co", vco)
+        vco = vco.reshape(-1, 3)
 
-                if split_normals and len(split_normals) > i:
-                    n = split_normals[i]
-                else:
-                    n = mesh.vertices[loop.vertex_index].normal
-                nx_b, ny_b, nz_b = _normal_xyz(n)
-                nx, ny, nz = _map_xyz(nx_b, ny_b, nz_b)
-                normals.extend((nx, ny, nz))
+        # ── Triangle → loop index (3 loops per tri) ──
+        tri_loop_idx = _np.empty(n_corners, dtype=_np.int32)
+        mesh.loop_triangles.foreach_get("loops", tri_loop_idx)
 
-                if uv_layer:
-                    uv = uv_layer[loop_index].uv
-                    uvs.extend((float(uv.x), float(uv.y)))
-                else:
-                    uvs.extend((0.0, 0.0))
+        # ── Vertex index per loop ──
+        loop_vert_idx = _np.empty(n_loops, dtype=_np.int32)
+        mesh.loops.foreach_get("vertex_index", loop_vert_idx)
 
-                tri_indices.append(next_index)
-                next_index += 1
+        # ── Normals: try Blender 4.1+ corner_normals first, then legacy ──
+        try:
+            # Blender 4.1+: corner_normals is a per-loop read-only attribute
+            nrm_raw = _np.empty(n_loops * 3, dtype=_np.float32)
+            mesh.corner_normals.foreach_get("vector", nrm_raw)
+            loop_nrm = nrm_raw.reshape(-1, 3)
+        except Exception:
+            try:
+                # Legacy Blender (<4.1): calc_normals_split then loops.foreach_get
+                mesh.calc_normals_split()
+                nrm_raw = _np.empty(n_loops * 3, dtype=_np.float32)
+                mesh.loops.foreach_get("normal", nrm_raw)
+                loop_nrm = nrm_raw.reshape(-1, 3)
+            except Exception:
+                # Ultimate fallback: use flat face normals per corner
+                loop_nrm = _np.zeros((n_loops, 3), dtype=_np.float32)
 
-            triangles.extend([tri_indices[0], tri_indices[2], tri_indices[1]])
+        # ── UVs ──
+        if mesh.uv_layers.active:
+            uv_raw = _np.empty(n_loops * 2, dtype=_np.float32)
+            mesh.uv_layers.active.data.foreach_get("uv", uv_raw)
+            uv_raw = uv_raw.reshape(-1, 2)
+        else:
+            uv_raw = _np.zeros((n_loops, 2), dtype=_np.float32)
+
+        # ── Gather per-corner data ──
+        corner_vert = loop_vert_idx[tri_loop_idx]
+        pos_b = vco[corner_vert]
+        nrm_b = loop_nrm[tri_loop_idx]
+        uv_c  = uv_raw[tri_loop_idx]
+
+        # Axis remap: Unity x=Bx, y=Bz, z=By
+        pos_u = pos_b[:, [0, 2, 1]]
+        nrm_u = nrm_b[:, [0, 2, 1]]
+
+        # Winding reversal: swap corner 1↔2 per tri
+        seq = _np.arange(n_corners, dtype=_np.int32).reshape(-1, 3)
+        seq[:, [1, 2]] = seq[:, [2, 1]]
+
+        vertices  = pos_u.flatten().tolist()
+        normals   = nrm_u.flatten().tolist()
+        uvs       = uv_c.flatten().tolist()
+        triangles = seq.flatten().tolist()
 
         snap: dict[str, Any] = {
             "object_name": obj_name,
@@ -660,12 +692,16 @@ def _sync_once(settings: "MMLSyncSettings", include_material: bool = False) -> t
 
     _is_syncing = True
     try:
+        t0 = time.monotonic()
         ok, snapshot_or_error = _build_snapshot(settings, include_material=include_material)
+        t1 = time.monotonic()
         if not ok:
             return False, str(snapshot_or_error)
 
         snapshot = snapshot_or_error
         ok, publish_result = _publish_sync(settings, snapshot)
+        t2 = time.monotonic()
+        print(f"[MML Perf] build={t1-t0:.3f}s  publish={t2-t1:.3f}s  total={t2-t0:.3f}s")
         if not ok:
             _queue_publish_retry(snapshot)
             return False, publish_result
@@ -702,14 +738,20 @@ def _event_publish_tick() -> float | None:
         return max(0.001, interval - elapsed)
 
     _dirty = False
-    ok, msg = _sync_once(settings)
-    settings.last_status = msg
-    if ok:
-        _last_publish_sent_at = time.monotonic()
-        print(f"[Unity Connection] {msg}")
-    else:
-        print(f"[Unity Connection] ERROR: {msg}")
-    _publish_timer_registered = False
+    try:
+        ok, msg = _sync_once(settings)
+        settings.last_status = msg
+        if ok:
+            _last_publish_sent_at = time.monotonic()
+            print(f"[Unity Connection] {msg}")
+        else:
+            print(f"[Unity Connection] ERROR: {msg}")
+    except Exception as _tick_err:
+        print(f"[Unity Connection] EXCEPTION in publish tick: {_tick_err}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        _publish_timer_registered = False
     return None
 
 
@@ -899,8 +941,8 @@ class MMLSYNC_OT_sync_now(Operator):
 
 class MMLSYNC_OT_reconnect(Operator):
     bl_idname = "mmlsync.reconnect"
-    bl_label = "Reconnect"
-    bl_description = "Reconnect Unity bridge now"
+    bl_label = "Reload"
+    bl_description = "Reload and reconnect Unity bridge"
 
     def execute(self, context):
         settings = context.scene.mml_sync_settings
