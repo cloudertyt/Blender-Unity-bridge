@@ -103,12 +103,12 @@ _C_MATRIX_INV = _C_MATRIX.inverted()
 
 def _show_popup(title: str, message: str, icon: str = "INFO") -> None:
     if bpy.app.background:
-        print(f"[Blender-Unity-Bridge] {title}: {message}")
+        print(f"[Unity Connection] {title}: {message}")
         return
 
     wm = bpy.context.window_manager
     if wm is None or len(wm.windows) == 0:
-        print(f"[Blender-Unity-Bridge] {title}: {message}")
+        print(f"[Unity Connection] {title}: {message}")
         return
 
     def draw(self, _context):
@@ -158,7 +158,7 @@ def _post_json(url: str, payload: dict[str, Any], timeout: float = 3.0) -> tuple
         t1 = time.monotonic()
         status, text = _http_request("POST", host, port, path, body=body, timeout=timeout)
         t2 = time.monotonic()
-        print(f"[BUB Perf]   json_encode={t1-t0:.3f}s  http_post={t2-t1:.3f}s  payload={len(body)//1024}KB")
+        print(f"[MML Perf]   json_encode={t1-t0:.3f}s  http_post={t2-t1:.3f}s  payload={len(body)//1024}KB")
         if status < 0:
             return False, None, "connection failed"
         data = json.loads(text) if text else {}
@@ -179,13 +179,13 @@ def _get_json(url: str, timeout: float = 3.0) -> tuple[bool, dict[str, Any] | No
         return False, None, str(exc)
 
 
-def _health_check(settings: "BUBSyncSettings", timeout: float = 1.5) -> bool:
+def _health_check(settings: "MMLSyncSettings", timeout: float = 1.5) -> bool:
     endpoint = settings.server_url.rstrip("/") + "/health"
     ok, data, _ = _get_json(endpoint, timeout=timeout)
     return bool(ok and data and data.get("status") == "ok")
 
 
-def _try_start_bridge(settings: "BUBSyncSettings") -> tuple[bool, str]:
+def _try_start_bridge(settings: "MMLSyncSettings") -> tuple[bool, str]:
     script = bpy.path.abspath(settings.bridge_start_script)
     script = os.path.abspath(script)
     if not os.path.isfile(script):
@@ -210,7 +210,7 @@ def _try_start_bridge(settings: "BUBSyncSettings") -> tuple[bool, str]:
             python_candidates.append(candidate)
 
     for pyexe in python_candidates:
-        cmd = [pyexe, "-m", "uvicorn", "blender_unity_bridge_server:app", "--host", "127.0.0.1", "--port", "8000"]
+        cmd = [pyexe, "-m", "uvicorn", "mml_bridge_server:app", "--host", "127.0.0.1", "--port", "8000"]
         try:
             proc = subprocess.Popen(
                 cmd,
@@ -253,14 +253,14 @@ def _try_start_bridge(settings: "BUBSyncSettings") -> tuple[bool, str]:
     return False, "Bridge start timed out."
 
 
-def _set_connection_enabled(settings: "BUBSyncSettings", value: bool) -> None:
+def _set_connection_enabled(settings: "MMLSyncSettings", value: bool) -> None:
     global _toggle_guard
     _toggle_guard = True
     settings.connection_enabled = value
     _toggle_guard = False
 
 
-def _connect(settings: "BUBSyncSettings") -> tuple[bool, str]:
+def _connect(settings: "MMLSyncSettings") -> tuple[bool, str]:
     global _http_conn
     # Reset connection to force a fresh TCP handshake on reconnect
     if _http_conn is not None:
@@ -309,7 +309,7 @@ def _connect(settings: "BUBSyncSettings") -> tuple[bool, str]:
     return True, "Unity connection established."
 
 
-def _disconnect(settings: "BUBSyncSettings") -> tuple[bool, str]:
+def _disconnect(settings: "MMLSyncSettings") -> tuple[bool, str]:
     endpoint = settings.server_url.rstrip("/") + "/sync/connection/disconnect"
     payload = {
         "source": "blender",
@@ -325,7 +325,7 @@ def _disconnect(settings: "BUBSyncSettings") -> tuple[bool, str]:
     return True, "Unity connection closed."
 
 
-def _refresh_connection_status(settings: "BUBSyncSettings", force: bool = False) -> tuple[bool, str]:
+def _refresh_connection_status(settings: "MMLSyncSettings", force: bool = False) -> tuple[bool, str]:
     global _last_status_poll_at
     now = time.monotonic()
     if not force and now - _last_status_poll_at < settings.status_poll_seconds:
@@ -553,7 +553,7 @@ def _build_object_snapshot(obj: bpy.types.Object, depsgraph: bpy.types.Depsgraph
                 if obj.material_slots and obj.material_slots[0].material:
                     node_graph = _serialize_node_graph(obj.material_slots[0].material)
             except Exception as _ng_err:
-                print(f"[Blender-Unity-Bridge] Node graph serialization failed: {_ng_err}")
+                print(f"[Unity Connection] Node graph serialization failed: {_ng_err}")
 
             material_data: dict[str, Any] = {}
             try:
@@ -580,7 +580,7 @@ def _build_object_snapshot(obj: bpy.types.Object, depsgraph: bpy.types.Depsgraph
                                 material_data["emission_strength"] = float(es_input.default_value) if es_input else 0.0
                                 break
             except Exception as _mat_err:
-                print(f"[Blender-Unity-Bridge] Material extraction failed: {_mat_err}")
+                print(f"[Unity Connection] Material extraction failed: {_mat_err}")
                 material_data = {}
 
             snap["material"] = material_data
@@ -592,7 +592,7 @@ def _build_object_snapshot(obj: bpy.types.Object, depsgraph: bpy.types.Depsgraph
         eval_obj.to_mesh_clear()
 
 
-def _build_snapshot(settings: "BUBSyncSettings", include_material: bool = False) -> tuple[bool, dict[str, Any] | str]:
+def _build_snapshot(settings: "MMLSyncSettings", include_material: bool = False) -> tuple[bool, dict[str, Any] | str]:
     depsgraph = bpy.context.evaluated_depsgraph_get()
     objects: list[dict[str, Any]] = []
 
@@ -620,7 +620,7 @@ def _build_snapshot(settings: "BUBSyncSettings", include_material: bool = False)
     return True, snapshot
 
 
-def _publish_sync(settings: "BUBSyncSettings", snapshot: dict[str, Any]) -> tuple[bool, str]:
+def _publish_sync(settings: "MMLSyncSettings", snapshot: dict[str, Any]) -> tuple[bool, str]:
     asset_name = _sanitize_file_name((settings.asset_name or "LiveModel").strip() or "LiveModel")
     payload = {
         "asset_name": asset_name,
@@ -661,7 +661,7 @@ def _clear_publish_retry() -> None:
     _pending_snapshot = None
 
 
-def _retry_pending_publish(settings: "BUBSyncSettings") -> tuple[bool, str]:
+def _retry_pending_publish(settings: "MMLSyncSettings") -> tuple[bool, str]:
     global _last_publish_retry_at
     if _pending_snapshot is None:
         return True, "no_pending"
@@ -681,7 +681,7 @@ def _retry_pending_publish(settings: "BUBSyncSettings") -> tuple[bool, str]:
     return False, f"pending publish failed: {msg}"
 
 
-def _sync_once(settings: "BUBSyncSettings", include_material: bool = False) -> tuple[bool, str]:
+def _sync_once(settings: "MMLSyncSettings", include_material: bool = False) -> tuple[bool, str]:
     global _is_syncing
     if _is_syncing:
         return False, "Sync skipped: publish in progress."
@@ -701,7 +701,7 @@ def _sync_once(settings: "BUBSyncSettings", include_material: bool = False) -> t
         snapshot = snapshot_or_error
         ok, publish_result = _publish_sync(settings, snapshot)
         t2 = time.monotonic()
-        print(f"[BUB Perf] build={t1-t0:.3f}s  publish={t2-t1:.3f}s  total={t2-t0:.3f}s")
+        print(f"[MML Perf] build={t1-t0:.3f}s  publish={t2-t1:.3f}s  total={t2-t0:.3f}s")
         if not ok:
             _queue_publish_retry(snapshot)
             return False, publish_result
@@ -712,18 +712,18 @@ def _sync_once(settings: "BUBSyncSettings", include_material: bool = False) -> t
         _is_syncing = False
 
 
-def _max_publish_interval(settings: "BUBSyncSettings") -> float:
+def _max_publish_interval(settings: "MMLSyncSettings") -> float:
     return max(1.0 / 30.0, float(settings.debounce_seconds))
 
 
 def _event_publish_tick() -> float | None:
     global _dirty, _publish_timer_registered, _last_publish_sent_at
     scene = bpy.context.scene
-    if not scene or not hasattr(scene, "bub_sync_settings"):
+    if not scene or not hasattr(scene, "mml_sync_settings"):
         _publish_timer_registered = False
         return None
 
-    settings = scene.bub_sync_settings
+    settings = scene.mml_sync_settings
     if not settings.auto_sync or not settings.connection_enabled:
         _publish_timer_registered = False
         return None
@@ -743,11 +743,11 @@ def _event_publish_tick() -> float | None:
         settings.last_status = msg
         if ok:
             _last_publish_sent_at = time.monotonic()
-            print(f"[Blender-Unity-Bridge] {msg}")
+            print(f"[Unity Connection] {msg}")
         else:
-            print(f"[Blender-Unity-Bridge] ERROR: {msg}")
+            print(f"[Unity Connection] ERROR: {msg}")
     except Exception as _tick_err:
-        print(f"[Blender-Unity-Bridge] EXCEPTION in publish tick: {_tick_err}")
+        print(f"[Unity Connection] EXCEPTION in publish tick: {_tick_err}")
         import traceback
         traceback.print_exc()
     finally:
@@ -768,7 +768,7 @@ def _mark_dirty() -> None:
     _dirty = True
 
 
-def _on_connection_toggle(settings: "BUBSyncSettings", _context: bpy.types.Context) -> None:
+def _on_connection_toggle(settings: "MMLSyncSettings", _context: bpy.types.Context) -> None:
     if _toggle_guard:
         return
 
@@ -790,9 +790,9 @@ def _on_connection_toggle(settings: "BUBSyncSettings", _context: bpy.types.Conte
 
 
 def _depsgraph_update(scene: bpy.types.Scene, depsgraph: bpy.types.Depsgraph) -> None:
-    if not hasattr(scene, "bub_sync_settings"):
+    if not hasattr(scene, "mml_sync_settings"):
         return
-    settings = scene.bub_sync_settings
+    settings = scene.mml_sync_settings
     if not settings.auto_sync or not settings.connection_enabled:
         return
 
@@ -806,10 +806,10 @@ def _depsgraph_update(scene: bpy.types.Scene, depsgraph: bpy.types.Depsgraph) ->
 
 def _draw_topbar(self, context: bpy.types.Context) -> None:
     scene = context.scene
-    if not scene or not hasattr(scene, "bub_sync_settings"):
+    if not scene or not hasattr(scene, "mml_sync_settings"):
         return
 
-    settings = scene.bub_sync_settings
+    settings = scene.mml_sync_settings
     row = self.layout.row(align=True)
     row.separator()
     row.prop(settings, "connection_enabled", text="Unity Connection", toggle=True)
@@ -819,10 +819,10 @@ def _draw_topbar(self, context: bpy.types.Context) -> None:
 
 def _draw_view3d_header(self, context: bpy.types.Context) -> None:
     scene = context.scene
-    if not scene or not hasattr(scene, "bub_sync_settings"):
+    if not scene or not hasattr(scene, "mml_sync_settings"):
         return
 
-    settings = scene.bub_sync_settings
+    settings = scene.mml_sync_settings
     row = self.layout.row(align=True)
     row.separator()
     row.prop(settings, "connection_enabled", text="Unity Connection", toggle=True)
@@ -832,10 +832,10 @@ def _sync_timer() -> float:
     scene = bpy.context.scene
     if not scene:
         return 0.1
-    if not hasattr(scene, "bub_sync_settings"):
+    if not hasattr(scene, "mml_sync_settings"):
         return 0.1
 
-    settings = scene.bub_sync_settings
+    settings = scene.mml_sync_settings
     if settings.connection_enabled:
         ok, msg = _refresh_connection_status(settings, force=False)
         if not ok:
@@ -859,31 +859,7 @@ def _ensure_timer_registered() -> None:
     _timer_registered = True
 
 
-def _auto_connect_deferred() -> None:
-    """Try to connect automatically; silently skip if bridge is not running."""
-    scene = bpy.context.scene
-    if not scene or not hasattr(scene, "bub_sync_settings"):
-        bpy.app.timers.register(_auto_connect_deferred, first_interval=1.0)
-        return
-    settings = scene.bub_sync_settings
-    ok, msg = _connect(settings)
-    settings.last_status = msg
-    if ok:
-        _set_connection_enabled(settings, True)
-        _mark_dirty()
-        _schedule_publish_from_event()
-        print(f"[Blender-Unity-Bridge] Auto-connected on startup: {msg}")
-    else:
-        print(f"[Blender-Unity-Bridge] Auto-connect skipped (bridge not running): {msg}")
-
-
-@bpy.app.handlers.persistent
-def _load_post_handler(_filepath: str) -> None:
-    """Auto-connect after Blender loads a file or starts up."""
-    bpy.app.timers.register(_auto_connect_deferred, first_interval=1.5)
-
-
-class BUBSyncSettings(PropertyGroup):
+class MMLSyncSettings(PropertyGroup):
     server_url: StringProperty(  # type: ignore
         name="Server URL",
         default="http://127.0.0.1:8000",
@@ -895,7 +871,7 @@ class BUBSyncSettings(PropertyGroup):
     bridge_start_script: StringProperty(  # type: ignore
         name="Bridge Start Script",
         subtype="FILE_PATH",
-        default="D:/Code-2/MML_Bridge/start_blender_unity_bridge.ps1",
+        default="D:/Code-2/MML_Bridge/start_mml_bridge.ps1",
     )
     bridge_python_exe: StringProperty(  # type: ignore
         name="Bridge Python",
@@ -947,13 +923,13 @@ class BUBSyncSettings(PropertyGroup):
     )
 
 
-class BUBSYNC_OT_sync_now(Operator):
-    bl_idname = "bubsync.sync_now"
+class MMLSYNC_OT_sync_now(Operator):
+    bl_idname = "mmlsync.sync_now"
     bl_label = "Sync Material"
     bl_description = "Push geometry + material/node-graph to Unity (one-shot, not auto)"
 
     def execute(self, context):
-        settings = context.scene.bub_sync_settings
+        settings = context.scene.mml_sync_settings
         ok, msg = _sync_once(settings, include_material=True)
         settings.last_status = msg
         if ok:
@@ -963,46 +939,35 @@ class BUBSYNC_OT_sync_now(Operator):
         return {"CANCELLED"}
 
 
-class BUBSYNC_OT_reconnect(Operator):
-    bl_idname = "bubsync.reconnect"
-    bl_label = "Reload"
-    bl_description = "Fully reload the addon module and auto-reconnect"
+class MMLSYNC_OT_reconnect(Operator):
+    bl_idname = "mmlsync.reconnect"
+    bl_label = "Reconnect"
+    bl_description = "Reconnect Unity bridge now"
 
     def execute(self, context):
-        import importlib
-        import sys
-
-        mod_name = __name__
-
-        def _deferred_reload():
-            mod = sys.modules.get(mod_name)
-            if mod is None:
-                print(f"[Blender-Unity-Bridge] Reload failed: module '{mod_name}' not found.")
-                return None
-            try:
-                mod.unregister()
-                importlib.reload(mod)
-                mod.register()
-                print("[Blender-Unity-Bridge] Addon reloaded successfully.")
-            except Exception as e:
-                print(f"[Blender-Unity-Bridge] Reload error: {e}")
-            return None  # run once
-
-        bpy.app.timers.register(_deferred_reload, first_interval=0.1)
-        self.report({"INFO"}, "Reloading addon…")
-        return {"FINISHED"}
+        settings = context.scene.mml_sync_settings
+        ok, msg = _connect(settings)
+        settings.last_status = msg
+        if ok:
+            _set_connection_enabled(settings, True)
+            _mark_dirty()
+            _schedule_publish_from_event()
+            self.report({"INFO"}, msg)
+            return {"FINISHED"}
+        self.report({"ERROR"}, msg)
+        return {"CANCELLED"}
 
 
-class BUBSYNC_PT_panel(Panel):
+class MMLSYNC_PT_panel(Panel):
     bl_label = "Unity Connection"
-    bl_idname = "BUBSYNC_PT_panel"
+    bl_idname = "MMLSYNC_PT_panel"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
-    bl_category = "BUB Sync"
+    bl_category = "MML Sync"
 
     def draw(self, context):
         layout = self.layout
-        settings = context.scene.bub_sync_settings
+        settings = context.scene.mml_sync_settings
 
         layout.prop(settings, "connection_enabled")
         layout.label(text=f"Remote: {'Connected' if settings.remote_connected else 'Disconnected'}")
@@ -1015,19 +980,19 @@ class BUBSYNC_PT_panel(Panel):
         layout.prop(settings, "auto_sync")
         layout.prop(settings, "debounce_seconds")
         layout.prop(settings, "publish_retry_seconds")
-        layout.operator("bubsync.reconnect", icon="FILE_REFRESH")
+        layout.operator("mmlsync.reconnect", icon="FILE_REFRESH")
 
         layout.separator()
         layout.label(text="Real-time: geometry only (no material)")
-        layout.operator("bubsync.sync_now", icon="MATERIAL", text="Sync Material (Manual)")
+        layout.operator("mmlsync.sync_now", icon="MATERIAL", text="Sync Material (Manual)")
         layout.label(text=f"Status: {settings.last_status}")
 
 
 classes = (
-    BUBSyncSettings,
-    BUBSYNC_OT_sync_now,
-    BUBSYNC_OT_reconnect,
-    BUBSYNC_PT_panel,
+    MMLSyncSettings,
+    MMLSYNC_OT_sync_now,
+    MMLSYNC_OT_reconnect,
+    MMLSYNC_PT_panel,
 )
 
 
@@ -1035,7 +1000,7 @@ def register():
     global _topbar_registered, _view3d_header_registered
     for cls in classes:
         bpy.utils.register_class(cls)
-    bpy.types.Scene.bub_sync_settings = PointerProperty(type=BUBSyncSettings)
+    bpy.types.Scene.mml_sync_settings = PointerProperty(type=MMLSyncSettings)
 
     if _depsgraph_update not in bpy.app.handlers.depsgraph_update_post:
         bpy.app.handlers.depsgraph_update_post.append(_depsgraph_update)
@@ -1053,21 +1018,14 @@ def register():
             funcs = bpy.types.VIEW3D_HT_header._dyn_ui_initialize()
         _view3d_header_registered = False
 
-    if _load_post_handler not in bpy.app.handlers.load_post:
-        bpy.app.handlers.load_post.append(_load_post_handler)
-
     _ensure_timer_registered()
-    # Also trigger auto-connect right now (for when the addon is enabled mid-session)
-    bpy.app.timers.register(_auto_connect_deferred, first_interval=1.5)
-    print("[Blender-Unity-Bridge] Add-on registered.")
+    print("[Unity Connection] Add-on registered.")
 
 
 def unregister():
     global _topbar_registered, _view3d_header_registered
     if _depsgraph_update in bpy.app.handlers.depsgraph_update_post:
         bpy.app.handlers.depsgraph_update_post.remove(_depsgraph_update)
-    if _load_post_handler in bpy.app.handlers.load_post:
-        bpy.app.handlers.load_post.remove(_load_post_handler)
 
     if _topbar_registered and hasattr(bpy.types, "TOPBAR_HT_upper_bar"):
         bpy.types.TOPBAR_HT_upper_bar.remove(_draw_topbar)
@@ -1076,10 +1034,10 @@ def unregister():
         bpy.types.VIEW3D_HT_header.remove(_draw_view3d_header)
         _view3d_header_registered = False
 
-    del bpy.types.Scene.bub_sync_settings
+    del bpy.types.Scene.mml_sync_settings
     for cls in reversed(classes):
         bpy.utils.unregister_class(cls)
-    print("[Blender-Unity-Bridge] Add-on unregistered.")
+    print("[Unity Connection] Add-on unregistered.")
 
 
 if __name__ == "__main__":

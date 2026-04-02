@@ -5,7 +5,7 @@ using UnityEngine;
 using UnityEngine.Networking;
 
 [Serializable]
-public class MmlCollectPayload
+public class BubCollectPayload
 {
     public string player_id;
     public string session_id;
@@ -22,7 +22,7 @@ public class EventData
     public string detail;
 }
 
-public class MmlBridgeClient : MonoBehaviour
+public class BlenderUnityBridgeClient : MonoBehaviour
 {
     private const string BaseUrl = "http://127.0.0.1:8000";
     private string _playerId;
@@ -31,14 +31,14 @@ public class MmlBridgeClient : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.AfterSceneLoad)]
     private static void Bootstrap()
     {
-        if (FindFirstObjectByType<MmlBridgeClient>() != null)
+        if (FindFirstObjectByType<BlenderUnityBridgeClient>() != null)
         {
             return;
         }
 
-        var go = new GameObject("MmlBridgeClient");
+        var go = new GameObject("BlenderUnityBridgeClient");
         DontDestroyOnLoad(go);
-        go.AddComponent<MmlBridgeClient>();
+        go.AddComponent<BlenderUnityBridgeClient>();
     }
 
     private void Awake()
@@ -61,17 +61,17 @@ public class MmlBridgeClient : MonoBehaviour
 
         if (req.result == UnityWebRequest.Result.Success)
         {
-            Debug.Log($"[MML Bridge] Connected: {req.downloadHandler.text}");
+            Debug.Log($"[Blender-Unity-Bridge] Connected: {req.downloadHandler.text}");
         }
         else
         {
-            Debug.LogWarning($"[MML Bridge] Health check failed: {req.error}");
+            Debug.LogWarning($"[Blender-Unity-Bridge] Health check failed: {req.error}");
         }
     }
 
     private IEnumerator SendStartupEvent()
     {
-        var payload = new MmlCollectPayload
+        var payload = new BubCollectPayload
         {
             player_id = _playerId,
             session_id = _sessionId,
@@ -98,11 +98,11 @@ public class MmlBridgeClient : MonoBehaviour
 
         if (req.result == UnityWebRequest.Result.Success)
         {
-            Debug.Log($"[MML Bridge] Event sent: {req.downloadHandler.text}");
+            Debug.Log($"[Blender-Unity-Bridge] Event sent: {req.downloadHandler.text}");
         }
         else
         {
-            Debug.LogWarning($"[MML Bridge] Event send failed: {req.error}");
+            Debug.LogWarning($"[Blender-Unity-Bridge] Event send failed: {req.error}");
         }
     }
 }

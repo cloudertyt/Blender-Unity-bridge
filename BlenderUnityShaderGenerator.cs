@@ -6,23 +6,23 @@ using UnityEditor;
 using UnityEngine;
 
 /// <summary>
-/// Translates a Blender shader node graph (MmlNodeGraphData) into a URP-compatible
+/// Translates a Blender shader node graph (BubNodeGraphData) into a URP-compatible
 /// HLSL .shader file and returns the compiled Shader asset.
 /// </summary>
-public static class MmlShaderGenerator
+public static class BlenderUnityShaderGenerator
 {
-    private const string GeneratedShaderDir = "Assets/Shaders/MML_Generated";
-    private const string TextureImportDir   = "Assets/Textures/MML_Live";
+    private const string GeneratedShaderDir = "Assets/Shaders/BUB_Generated";
+    private const string TextureImportDir   = "Assets/Textures/BUB_Live";
 
     // Cache: assetPath → last HLSL source written. Avoids recompile when source unchanged.
     private static readonly Dictionary<string, string> s_shaderSourceCache = new();
 
     // ── Public API ──────────────────────────────────────────────────────────
 
-    public static Shader GetOrGenerateShader(MmlNodeGraphData graph, string materialName)
+    public static Shader GetOrGenerateShader(BubNodeGraphData graph, string materialName)
     {
         string safeName  = SafeName(materialName);
-        string shaderName = $"MML/Generated_{safeName}";
+        string shaderName = $"BUB/Generated_{safeName}";
         string assetPath  = $"{GeneratedShaderDir}/MML_{safeName}.shader";
 
         EnsureDir(GeneratedShaderDir);
@@ -38,17 +38,17 @@ public static class MmlShaderGenerator
             File.WriteAllText(fullPath, hlsl, Encoding.UTF8);
             AssetDatabase.ImportAsset(assetPath, ImportAssetOptions.ForceSynchronousImport);
             s_shaderSourceCache[assetPath] = hlsl;
-            Debug.Log($"[MML] Shader recompiled: {shaderName}");
+            Debug.Log($"[BUB] Shader recompiled: {shaderName}");
         }
 
         return AssetDatabase.LoadAssetAtPath<Shader>(assetPath);
     }
 
     /// <summary>
-    /// Copies textures referenced by Blender img_path into Assets/Textures/MML_Live/
+    /// Copies textures referenced by Blender img_path into Assets/Textures/BUB_Live/
     /// and imports them so they are available to the material.
     /// </summary>
-    public static void ImportReferencedTextures(MmlNodeGraphData graph)
+    public static void ImportReferencedTextures(BubNodeGraphData graph)
     {
         if (graph?.nodes == null) return;
         EnsureDir(TextureImportDir);
@@ -70,7 +70,7 @@ public static class MmlShaderGenerator
             {
                 File.Copy(node.img_path, destFull, overwrite: true);
                 AssetDatabase.ImportAsset(destAsset, ImportAssetOptions.ForceSynchronousImport);
-                Debug.Log($"[MML] Imported texture: {fileName}");
+                Debug.Log($"[BUB] Imported texture: {fileName}");
             }
 
             // Ensure all sync textures are imported as linear (non-sRGB) Default type
@@ -85,7 +85,7 @@ public static class MmlShaderGenerator
     }
 
     /// <summary>Assigns texture properties after the material is created.</summary>
-    public static void AssignTextureProperties(Material mat, MmlNodeGraphData graph)
+    public static void AssignTextureProperties(Material mat, BubNodeGraphData graph)
     {
         if (graph?.nodes == null) return;
         foreach (var node in graph.nodes)
@@ -119,13 +119,13 @@ public static class MmlShaderGenerator
 
     // ── Core Builder ────────────────────────────────────────────────────────
 
-    private static string BuildShaderSource(MmlNodeGraphData graph, string shaderName)
+    private static string BuildShaderSource(BubNodeGraphData graph, string shaderName)
     {
         if (graph?.nodes == null || graph.nodes.Length == 0)
             return FallbackShader(shaderName);
 
         // Index structures
-        var nodeMap  = new Dictionary<string, MmlNodeData>();
+        var nodeMap  = new Dictionary<string, BubNodeData>();
         foreach (var n in graph.nodes) nodeMap[n.name] = n;
 
         // linkMap[(toNode, toSocket)] = (fromNode, fromSocket)
@@ -135,23 +135,23 @@ public static class MmlShaderGenerator
                 linkMap[(l.tn, l.ts)] = (l.fn, l.fs);
 
         // Find Principled BSDF (or Emission shader)
-        MmlNodeData bsdf     = null;
-        MmlNodeData emission = null;
+        BubNodeData bsdf     = null;
+        BubNodeData emission = null;
         foreach (var n in graph.nodes)
         {
             if (n.type == "BSDF_PRINCIPLED" && bsdf == null) bsdf = n;
             if (n.type == "EMISSION"         && emission == null) emission = n;
         }
-        MmlNodeData outputShaderNode = bsdf ?? emission;
+        BubNodeData outputShaderNode = bsdf ?? emission;
         if (outputShaderNode == null) return FallbackShader(shaderName);
 
         // Topological sort (DFS post-order from the shader node's inputs)
         var visited = new HashSet<string>();
-        var order   = new List<MmlNodeData>();
+        var order   = new List<BubNodeData>();
         TopoVisit(outputShaderNode, nodeMap, linkMap, visited, order);
 
         // Collect image texture nodes → Properties + cbuffer entries
-        var texNodes     = new List<MmlNodeData>();
+        var texNodes     = new List<BubNodeData>();
         var propLines    = new StringBuilder();
         var cbufferLines = new StringBuilder();
         var texDeclLines = new StringBuilder();
@@ -385,10 +385,10 @@ Shader ""{shaderName}""
 
     // ── Topological Sort (DFS post-order) ───────────────────────────────────
 
-    private static void TopoVisit(MmlNodeData node,
-        Dictionary<string, MmlNodeData> nodeMap,
+    private static void TopoVisit(BubNodeData node,
+        Dictionary<string, BubNodeData> nodeMap,
         Dictionary<(string, string), (string, string)> linkMap,
-        HashSet<string> visited, List<MmlNodeData> order)
+        HashSet<string> visited, List<BubNodeData> order)
     {
         if (visited.Contains(node.name)) return;
         visited.Add(node.name);
@@ -409,8 +409,8 @@ Shader ""{shaderName}""
 
     // ── Node Code Emission ──────────────────────────────────────────────────
 
-    private static void EmitNode(MmlNodeData node,
-        Dictionary<string, MmlNodeData> nodeMap,
+    private static void EmitNode(BubNodeData node,
+        Dictionary<string, BubNodeData> nodeMap,
         Dictionary<(string, string), (string, string)> linkMap,
         Dictionary<(string, string), string> varTypes,
         StringBuilder sb)
@@ -848,7 +848,7 @@ Shader ""{shaderName}""
 
     // ── Color Ramp Code Generation ──────────────────────────────────────────
 
-    private static string ColorRampExpr(MmlNodeData node, string facVar, out string alphaExpr)
+    private static string ColorRampExpr(BubNodeData node, string facVar, out string alphaExpr)
     {
         if (node.cr_pos == null || node.cr_pos.Length < 2 || node.cr_col == null)
         {
@@ -893,10 +893,10 @@ Shader ""{shaderName}""
     // ── Input Resolution ────────────────────────────────────────────────────
 
     /// Get float input (VALUE type) for a named socket.
-    private static string GetInputF(MmlNodeData node, string socketName,
+    private static string GetInputF(BubNodeData node, string socketName,
         Dictionary<(string, string), (string, string)> linkMap,
         Dictionary<(string, string), string> varTypes,
-        Dictionary<string, MmlNodeData> nodeMap, string fallback)
+        Dictionary<string, BubNodeData> nodeMap, string fallback)
     {
         if (linkMap.TryGetValue((node.name, socketName), out var src))
         {
@@ -918,10 +918,10 @@ Shader ""{shaderName}""
     }
 
     /// Get float input by socket index (handles Blender's duplicate "Value" names).
-    private static string GetInputFByIndex(MmlNodeData node, int idx,
+    private static string GetInputFByIndex(BubNodeData node, int idx,
         Dictionary<(string, string), (string, string)> linkMap,
         Dictionary<(string, string), string> varTypes,
-        Dictionary<string, MmlNodeData> nodeMap, string fallback)
+        Dictionary<string, BubNodeData> nodeMap, string fallback)
     {
         if (node.inputs == null || idx >= node.inputs.Length) return fallback;
         string socketName = node.inputs[idx].name;
@@ -934,10 +934,10 @@ Shader ""{shaderName}""
     }
 
     /// Get float3 input (RGBA/VECTOR type) for a named socket.
-    private static string GetInputF3(MmlNodeData node, string socketName,
+    private static string GetInputF3(BubNodeData node, string socketName,
         Dictionary<(string, string), (string, string)> linkMap,
         Dictionary<(string, string), string> varTypes,
-        Dictionary<string, MmlNodeData> nodeMap, string fallback)
+        Dictionary<string, BubNodeData> nodeMap, string fallback)
     {
         if (linkMap.TryGetValue((node.name, socketName), out var src))
         {
@@ -957,10 +957,10 @@ Shader ""{shaderName}""
         return fallback;
     }
 
-    private static string GetInputF3ByIndex(MmlNodeData node, int idx,
+    private static string GetInputF3ByIndex(BubNodeData node, int idx,
         Dictionary<(string, string), (string, string)> linkMap,
         Dictionary<(string, string), string> varTypes,
-        Dictionary<string, MmlNodeData> nodeMap, string fallback)
+        Dictionary<string, BubNodeData> nodeMap, string fallback)
     {
         if (node.inputs == null || idx >= node.inputs.Length) return fallback;
         return GetInputF3(node, node.inputs[idx].name, linkMap, varTypes, nodeMap, fallback);
@@ -1091,14 +1091,14 @@ Shader ""{shaderName}""
         return $"float3({F(c[0])},{F(c[1])},{F(c[2])})";
     }
 
-    private static float InpDV(MmlNodeData node, string name)
+    private static float InpDV(BubNodeData node, string name)
     {
         if (node.inputs == null) return 0f;
         foreach (var i in node.inputs) if (i.name == name) return i.dv;
         return 0f;
     }
 
-    private static float[] InpDC(MmlNodeData node, string name)
+    private static float[] InpDC(BubNodeData node, string name)
     {
         if (node.inputs == null) return null;
         foreach (var i in node.inputs) if (i.name == name) return i.dc;

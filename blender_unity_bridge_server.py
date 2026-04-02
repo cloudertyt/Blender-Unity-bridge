@@ -10,10 +10,10 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-DB_PATH = Path(__file__).with_name("mml_bridge.db")
+DB_PATH = Path(__file__).with_name("blender_unity_bridge.db")
 _snapshot_ws_clients: set[WebSocket] = set()
 
-app = FastAPI(title="MML Bridge Server", version="0.5.0")
+app = FastAPI(title="Blender-Unity-Bridge Server", version="0.5.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -481,7 +481,7 @@ async def ws_chat(websocket: WebSocket) -> None:
             await websocket.send_json(
                 {
                     "type": "reply",
-                    "message": f"[MML bridge] {message or 'empty message'}",
+                    "message": f"[BUB bridge] {message or 'empty message'}",
                     "time": now_iso(),
                 }
             )

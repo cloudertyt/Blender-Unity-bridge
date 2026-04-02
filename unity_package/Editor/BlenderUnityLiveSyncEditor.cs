@@ -13,7 +13,7 @@ using UnityEngine.Networking;
 using UnityEngine.SceneManagement;
 
 [Serializable]
-public class MmlConnectionStatusResponse
+public class BubConnectionStatusResponse
 {
     public bool ok;
     public bool connected;
@@ -24,15 +24,15 @@ public class MmlConnectionStatusResponse
 }
 
 [Serializable]
-public class MmlSnapshotLatestResponse
+public class BubSnapshotLatestResponse
 {
     public bool ok;
-    public MmlSnapshotEvent latest_event;
-    public MmlSnapshotEvent latestEvent;
+    public BubSnapshotEvent latest_event;
+    public BubSnapshotEvent latestEvent;
 }
 
 [Serializable]
-public class MmlSnapshotEvent
+public class BubSnapshotEvent
 {
     public int id;
     public int eventId;
@@ -48,17 +48,17 @@ public class MmlSnapshotEvent
     public string metadataJson;
     public string created_at;
     public string createdAt;
-    public MmlSnapshotPayload snapshot;
+    public BubSnapshotPayload snapshot;
 }
 
 [Serializable]
-public class MmlSnapshotPayload
+public class BubSnapshotPayload
 {
-    public MmlSnapshotObject[] objects;
+    public BubSnapshotObject[] objects;
 }
 
 [Serializable]
-public class MmlMaterialData
+public class BubMaterialData
 {
     public string material_name;
     public float[] base_color;
@@ -71,7 +71,7 @@ public class MmlMaterialData
 // ── Node Graph Data Classes ──────────────────────────────────────────────────
 
 [Serializable]
-public class MmlNodeInputData
+public class BubNodeInputData
 {
     public string name;
     public string type;   // VALUE | RGBA | VECTOR | SHADER
@@ -80,7 +80,7 @@ public class MmlNodeInputData
 }
 
 [Serializable]
-public class MmlNodeData
+public class BubNodeData
 {
     public string name;        // ASCII-safe id, e.g. "N0_BSDF_PRINCIPLED"
     public string type;        // Blender node type
@@ -92,11 +92,11 @@ public class MmlNodeData
     public float[] cr_col;     // color ramp stop colors (4 floats per stop, RGBA)
     public string img_name;    // image texture: image name
     public string img_path;    // image texture: absolute path on Blender machine
-    public MmlNodeInputData[] inputs;
+    public BubNodeInputData[] inputs;
 }
 
 [Serializable]
-public class MmlNodeLinkData
+public class BubNodeLinkData
 {
     public string fn;  // from_node safe name
     public string fs;  // from_socket name
@@ -105,17 +105,17 @@ public class MmlNodeLinkData
 }
 
 [Serializable]
-public class MmlNodeGraphData
+public class BubNodeGraphData
 {
-    public MmlNodeData[]     nodes;
-    public MmlNodeLinkData[] links;
+    public BubNodeData[]     nodes;
+    public BubNodeLinkData[] links;
     public string            output_node;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
 
 [Serializable]
-public class MmlSnapshotObject
+public class BubSnapshotObject
 {
     public string object_name;
     public string objectName;
@@ -126,12 +126,12 @@ public class MmlSnapshotObject
     public int[] triangles;
     public float[] normals;
     public float[] uv;
-    public MmlMaterialData  material;
-    public MmlNodeGraphData node_graph;
+    public BubMaterialData  material;
+    public BubNodeGraphData node_graph;
 }
 
 [InitializeOnLoad]
-public static class MmlBlenderLiveSyncEditor
+public static class BlenderUnityLiveSyncEditor
 {
     private static readonly Regex EventIdRegex = new Regex("\\\"id\\\"\\s*:\\s*(?<v>\\d+)", RegexOptions.Compiled);
     private static readonly Regex EventIdCamelRegex = new Regex("\\\"eventId\\\"\\s*:\\s*(?<v>\\d+)", RegexOptions.Compiled);
@@ -145,13 +145,13 @@ public static class MmlBlenderLiveSyncEditor
         LatestSync = 2,
     }
 
-    private const string MenuRoot = "MML Bridge/Live Sync/";
-    private const string PrefEnabled = "MML.LiveSync.Enabled";
-    private const string PrefServerUrl = "MML.LiveSync.ServerUrl";
-    private const string PrefPollSeconds = "MML.LiveSync.PollSeconds";
-    private const string PrefLastEventId = "MML.LiveSync.LastSnapshotEventId";
-    private const string RootObjectName = "MML_LiveSync_Root";
-    private const string ChildPrefix = "MML_LiveSync_";
+    private const string MenuRoot = "Blender-Unity-Bridge/Live Sync/";
+    private const string PrefEnabled = "BUB.LiveSync.Enabled";
+    private const string PrefServerUrl = "BUB.LiveSync.ServerUrl";
+    private const string PrefPollSeconds = "BUB.LiveSync.PollSeconds";
+    private const string PrefLastEventId = "BUB.LiveSync.LastSnapshotEventId";
+    private const string RootObjectName = "BUB_LiveSync_Root";
+    private const string ChildPrefix = "BUB_LiveSync_";
 
     private static UnityWebRequest _activeRequest;
     private static RequestKind _activeRequestKind = RequestKind.None;
@@ -174,7 +174,7 @@ public static class MmlBlenderLiveSyncEditor
     private static bool _wsConnectedLogState;
     private const int ConnectionFailureThreshold = 3;
 
-    static MmlBlenderLiveSyncEditor()
+    static BlenderUnityLiveSyncEditor()
     {
         EditorApplication.update += OnEditorUpdate;
         AssemblyReloadEvents.beforeAssemblyReload += StopWebSocketReceiver;
@@ -211,7 +211,7 @@ public static class MmlBlenderLiveSyncEditor
     private static void Disable() => Enabled = false;
 
     [MenuItem(MenuRoot + "Settings")]
-    private static void OpenSettings() => MmlBlenderLiveSyncWindow.Open();
+    private static void OpenSettings() => BlenderUnityLiveSyncWindow.Open();
 
     [MenuItem(MenuRoot + "Reset Last Event ID")]
     private static void ResetLastEventId() => LastEventId = 0;
@@ -300,7 +300,7 @@ public static class MmlBlenderLiveSyncEditor
                 {
                     if (_connected)
                     {
-                        Debug.LogWarning("[MML Live Sync] Connection status check failed repeatedly; marking disconnected.");
+                        Debug.LogWarning("[BUB Live Sync] Connection status check failed repeatedly; marking disconnected.");
                     }
                     _connected = false;
                     StopWebSocketReceiver();
@@ -322,10 +322,10 @@ public static class MmlBlenderLiveSyncEditor
 
     private static void HandleConnectionStatus(string json)
     {
-        MmlConnectionStatusResponse response;
+        BubConnectionStatusResponse response;
         try
         {
-            response = JsonUtility.FromJson<MmlConnectionStatusResponse>(json);
+            response = JsonUtility.FromJson<BubConnectionStatusResponse>(json);
         }
         catch
         {
@@ -355,7 +355,7 @@ public static class MmlBlenderLiveSyncEditor
 
         if (_connected != previous)
         {
-            Debug.Log($"[MML Live Sync] Connection state changed: {(_connected ? "Connected" : "Disconnected")}");
+            Debug.Log($"[BUB Live Sync] Connection state changed: {(_connected ? "Connected" : "Disconnected")}");
             if (!_connected)
             {
                 StopWebSocketReceiver();
@@ -371,10 +371,10 @@ public static class MmlBlenderLiveSyncEditor
             return;
         }
 
-        MmlSnapshotLatestResponse response;
+        BubSnapshotLatestResponse response;
         try
         {
-            response = JsonUtility.FromJson<MmlSnapshotLatestResponse>(json);
+            response = JsonUtility.FromJson<BubSnapshotLatestResponse>(json);
         }
         catch
         {
@@ -386,7 +386,7 @@ public static class MmlBlenderLiveSyncEditor
             return;
         }
 
-        MmlSnapshotEvent syncEvent = SelectBestEvent(response.latestEvent, response.latest_event);
+        BubSnapshotEvent syncEvent = SelectBestEvent(response.latestEvent, response.latest_event);
         syncEvent = PopulateFromRawJsonIfNeeded(syncEvent, json);
         if (syncEvent == null || syncEvent.snapshot == null)
         {
@@ -402,7 +402,7 @@ public static class MmlBlenderLiveSyncEditor
         // the bridge server was restarted and its counter reset — auto-recover.
         if (eventId < LastEventId - 50)
         {
-            Debug.Log($"[MML Live Sync] Server restart detected (event {eventId} < last {LastEventId}), resetting LastEventId.");
+            Debug.Log($"[BUB Live Sync] Server restart detected (event {eventId} < last {LastEventId}), resetting LastEventId.");
             LastEventId = 0;
         }
 
@@ -415,7 +415,7 @@ public static class MmlBlenderLiveSyncEditor
         LastEventId = Mathf.Max(LastEventId, eventId);
     }
 
-    private static int GetEventId(MmlSnapshotEvent syncEvent)
+    private static int GetEventId(BubSnapshotEvent syncEvent)
     {
         if (syncEvent == null)
         {
@@ -430,7 +430,7 @@ public static class MmlBlenderLiveSyncEditor
         return syncEvent.eventId;
     }
 
-    private static MmlSnapshotEvent SelectBestEvent(MmlSnapshotEvent first, MmlSnapshotEvent second)
+    private static BubSnapshotEvent SelectBestEvent(BubSnapshotEvent first, BubSnapshotEvent second)
     {
         if (first != null)
         {
@@ -440,11 +440,11 @@ public static class MmlBlenderLiveSyncEditor
         return second;
     }
 
-    private static MmlSnapshotEvent PopulateFromRawJsonIfNeeded(MmlSnapshotEvent syncEvent, string rawJson)
+    private static BubSnapshotEvent PopulateFromRawJsonIfNeeded(BubSnapshotEvent syncEvent, string rawJson)
     {
         if (syncEvent == null)
         {
-            syncEvent = new MmlSnapshotEvent();
+            syncEvent = new BubSnapshotEvent();
         }
 
         if (GetEventId(syncEvent) <= 0)
@@ -467,7 +467,7 @@ public static class MmlBlenderLiveSyncEditor
             {
                 try
                 {
-                    syncEvent.snapshot = JsonUtility.FromJson<MmlSnapshotPayload>(payload);
+                    syncEvent.snapshot = JsonUtility.FromJson<BubSnapshotPayload>(payload);
                 }
                 catch
                 {
@@ -520,19 +520,19 @@ public static class MmlBlenderLiveSyncEditor
         return value;
     }
 
-    private static MmlSnapshotObject[] GetObjects(MmlSnapshotEvent syncEvent)
+    private static BubSnapshotObject[] GetObjects(BubSnapshotEvent syncEvent)
     {
         if (syncEvent == null || syncEvent.snapshot == null || syncEvent.snapshot.objects == null)
         {
-            return Array.Empty<MmlSnapshotObject>();
+            return Array.Empty<BubSnapshotObject>();
         }
 
         return syncEvent.snapshot.objects;
     }
 
-    private static void ApplySnapshotEvent(MmlSnapshotEvent syncEvent)
+    private static void ApplySnapshotEvent(BubSnapshotEvent syncEvent)
     {
-        MmlSnapshotObject[] objects = GetObjects(syncEvent);
+        BubSnapshotObject[] objects = GetObjects(syncEvent);
         Scene activeScene = SceneManager.GetActiveScene();
         if (!activeScene.IsValid() || !activeScene.isLoaded)
         {
@@ -603,7 +603,7 @@ public static class MmlBlenderLiveSyncEditor
         // redraws when the mouse enters the Scene window.
         UnityEditor.SceneView.RepaintAll();
 
-        Debug.Log($"[MML Live Sync] Snapshot applied (event {GetEventId(syncEvent)}, objects {objects.Length})");
+        Debug.Log($"[BUB Live Sync] Snapshot applied (event {GetEventId(syncEvent)}, objects {objects.Length})");
     }
 
     private static GameObject GetOrCreateRoot(Scene activeScene)
@@ -622,7 +622,7 @@ public static class MmlBlenderLiveSyncEditor
         return created;
     }
 
-    private static string GetObjectName(MmlSnapshotObject obj)
+    private static string GetObjectName(BubSnapshotObject obj)
     {
         if (obj == null)
         {
@@ -652,14 +652,14 @@ public static class MmlBlenderLiveSyncEditor
         return value.Trim();
     }
 
-    private static void ApplyTransform(Transform transform, MmlSnapshotObject obj)
+    private static void ApplyTransform(Transform transform, BubSnapshotObject obj)
     {
         transform.localPosition = ReadVector3(obj.position, Vector3.zero);
         transform.localRotation = ReadQuaternion(obj.rotation, Quaternion.identity);
         transform.localScale = ReadVector3(obj.scale, Vector3.one);
     }
 
-    private static bool ApplyMesh(GameObject target, string meshName, MmlSnapshotObject obj,
+    private static bool ApplyMesh(GameObject target, string meshName, BubSnapshotObject obj,
                                   ref bool anyMaterialDirty)
     {
         var filter = target.GetComponent<MeshFilter>();
@@ -728,18 +728,18 @@ public static class MmlBlenderLiveSyncEditor
         return true;
     }
 
-    private static void ApplyNodeGraphMaterial(MeshRenderer renderer, MmlNodeGraphData graph, string matName)
+    private static void ApplyNodeGraphMaterial(MeshRenderer renderer, BubNodeGraphData graph, string matName)
     {
         try
         {
-            Shader shader = MmlShaderGenerator.GetOrGenerateShader(graph, matName);
+            Shader shader = BlenderUnityShaderGenerator.GetOrGenerateShader(graph, matName);
             if (shader == null)
             {
-                Debug.LogWarning($"[MML Live Sync] Shader generation failed for '{matName}', falling back.");
+                Debug.LogWarning($"[BUB Live Sync] Shader generation failed for '{matName}', falling back.");
                 return;
             }
             string safeName  = MakeSafeObjectName(matName);
-            string matPath   = $"Assets/Materials/MML_LiveSync_{safeName}.mat";
+            string matPath   = $"Assets/Materials/BUB_LiveSync_{safeName}.mat";
             if (!AssetDatabase.IsValidFolder("Assets/Materials"))
                 AssetDatabase.CreateFolder("Assets", "Materials");
 
@@ -754,24 +754,24 @@ public static class MmlBlenderLiveSyncEditor
                 mat.shader = shader;
             }
             // Copy image texture assets referenced by the generator
-            MmlShaderGenerator.AssignTextureProperties(mat, graph);
+            BlenderUnityShaderGenerator.AssignTextureProperties(mat, graph);
 
             EditorUtility.SetDirty(mat);
             renderer.sharedMaterial = mat;
             EditorUtility.SetDirty(renderer);
-            Debug.Log($"[MML Live Sync] Node-graph shader applied: {shader.name}");
+            Debug.Log($"[BUB Live Sync] Node-graph shader applied: {shader.name}");
         }
         catch (Exception ex)
         {
-            Debug.LogError($"[MML Live Sync] ApplyNodeGraphMaterial error: {ex.Message}");
+            Debug.LogError($"[BUB Live Sync] ApplyNodeGraphMaterial error: {ex.Message}");
         }
     }
 
-    private static void ApplyMaterial(MeshRenderer renderer, MmlMaterialData matData)
+    private static void ApplyMaterial(MeshRenderer renderer, BubMaterialData matData)
     {
-        Debug.Log($"[MML Live Sync] ApplyMaterial: name={matData.material_name}, has_base_color={matData.base_color != null}, metallic={matData.metallic}, roughness={matData.roughness}");
+        Debug.Log($"[BUB Live Sync] ApplyMaterial: name={matData.material_name}, has_base_color={matData.base_color != null}, metallic={matData.metallic}, roughness={matData.roughness}");
         string safeName = MakeSafeObjectName(matData.material_name);
-        string matPath = $"Assets/Materials/MML_LiveSync_{safeName}.mat";
+        string matPath = $"Assets/Materials/BUB_LiveSync_{safeName}.mat";
 
         if (!AssetDatabase.IsValidFolder("Assets/Materials"))
         {
@@ -782,7 +782,7 @@ public static class MmlBlenderLiveSyncEditor
         if (mat == null)
         {
             Shader shader = Shader.Find("Universal Render Pipeline/Lit") ?? Shader.Find("Standard") ?? Shader.Find("Sprites/Default");
-            Debug.Log($"[MML Live Sync] Creating material with shader: {(shader != null ? shader.name : "NULL")}");
+            Debug.Log($"[BUB Live Sync] Creating material with shader: {(shader != null ? shader.name : "NULL")}");
             mat = new Material(shader) { name = matData.material_name };
             AssetDatabase.CreateAsset(mat, matPath);
         }
@@ -822,7 +822,7 @@ public static class MmlBlenderLiveSyncEditor
         EditorUtility.SetDirty(mat);
         renderer.sharedMaterial = mat;
         EditorUtility.SetDirty(renderer);
-        Debug.Log($"[MML Live Sync] Material applied: {mat.name}, shader={mat.shader.name}");
+        Debug.Log($"[BUB Live Sync] Material applied: {mat.name}, shader={mat.shader.name}");
     }
 
     private static Material GetDefaultMaterial()
@@ -849,7 +849,7 @@ public static class MmlBlenderLiveSyncEditor
         }
 
         _defaultMaterial = new Material(shader);
-        _defaultMaterial.name = "MML_LiveSync_DefaultMat";
+        _defaultMaterial.name = "BUB_LiveSync_DefaultMat";
         _defaultMaterial.hideFlags = HideFlags.DontSave;
         return _defaultMaterial;
     }
@@ -1079,7 +1079,7 @@ public static class MmlBlenderLiveSyncEditor
         if (_wsConnectedLogState)
         {
             _wsConnectedLogState = false;
-            Debug.Log("[MML Live Sync] Snapshot WS disconnected.");
+            Debug.Log("[BUB Live Sync] Snapshot WS disconnected.");
         }
     }
 
@@ -1115,17 +1115,17 @@ public static class MmlBlenderLiveSyncEditor
             if (_wsConnected)
             {
                 _lastWsErrorLogged = string.Empty;
-                Debug.Log("[MML Live Sync] Snapshot WS connected.");
+                Debug.Log("[BUB Live Sync] Snapshot WS connected.");
             }
             else
             {
                 if (string.IsNullOrWhiteSpace(_lastWsError))
                 {
-                    Debug.Log("[MML Live Sync] Snapshot WS disconnected.");
+                    Debug.Log("[BUB Live Sync] Snapshot WS disconnected.");
                 }
                 else
                 {
-                    Debug.LogWarning($"[MML Live Sync] Snapshot WS disconnected: {_lastWsError}");
+                    Debug.LogWarning($"[BUB Live Sync] Snapshot WS disconnected: {_lastWsError}");
                     _lastWsErrorLogged = _lastWsError;
                 }
             }
@@ -1134,7 +1134,7 @@ public static class MmlBlenderLiveSyncEditor
         if (!_wsConnected && !_wsConnecting && !string.IsNullOrWhiteSpace(_lastWsError) && _lastWsError != _lastWsErrorLogged)
         {
             _lastWsErrorLogged = _lastWsError;
-            Debug.LogWarning($"[MML Live Sync] Snapshot WS error: {_lastWsError}");
+            Debug.LogWarning($"[BUB Live Sync] Snapshot WS error: {_lastWsError}");
         }
     }
 
@@ -1185,7 +1185,7 @@ public static class MmlBlenderLiveSyncEditor
     }
 }
 
-public class MmlBlenderLiveSyncWindow : EditorWindow
+public class BlenderUnityLiveSyncWindow : EditorWindow
 {
     private string _serverUrl;
     private float _pollSeconds;
@@ -1193,7 +1193,7 @@ public class MmlBlenderLiveSyncWindow : EditorWindow
 
     public static void Open()
     {
-        var window = GetWindow<MmlBlenderLiveSyncWindow>("MML Live Sync");
+        var window = GetWindow<BlenderUnityLiveSyncWindow>("MML Live Sync");
         window.minSize = new Vector2(360, 120);
         window.LoadValues();
         window.Show();
@@ -1206,9 +1206,9 @@ public class MmlBlenderLiveSyncWindow : EditorWindow
 
     private void LoadValues()
     {
-        _serverUrl = MmlBlenderLiveSyncEditor.GetServerUrl();
-        _pollSeconds = MmlBlenderLiveSyncEditor.GetPollSeconds();
-        _enabled = MmlBlenderLiveSyncEditor.GetEnabled();
+        _serverUrl = BlenderUnityLiveSyncEditor.GetServerUrl();
+        _pollSeconds = BlenderUnityLiveSyncEditor.GetPollSeconds();
+        _enabled = BlenderUnityLiveSyncEditor.GetEnabled();
     }
 
     private void OnGUI()
@@ -1221,9 +1221,9 @@ public class MmlBlenderLiveSyncWindow : EditorWindow
         GUILayout.Space(8);
         if (GUILayout.Button("Save"))
         {
-            MmlBlenderLiveSyncEditor.SetEnabled(_enabled);
-            MmlBlenderLiveSyncEditor.SetServerUrl(_serverUrl);
-            MmlBlenderLiveSyncEditor.SetPollSeconds(_pollSeconds);
+            BlenderUnityLiveSyncEditor.SetEnabled(_enabled);
+            BlenderUnityLiveSyncEditor.SetServerUrl(_serverUrl);
+            BlenderUnityLiveSyncEditor.SetPollSeconds(_pollSeconds);
         }
     }
 }

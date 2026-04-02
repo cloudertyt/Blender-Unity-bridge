@@ -1,12 +1,8 @@
 {
-    "name": "MmlBridge.Editor",
+    "name": "BlenderUnityBridge.Runtime",
     "rootNamespace": "",
-    "references": [
-        "GUID:d8b63eecd4ac4a0090000000deadbeef"
-    ],
-    "includePlatforms": [
-        "Editor"
-    ],
+    "references": [],
+    "includePlatforms": [],
     "excludePlatforms": [],
     "allowUnsafeCode": false,
     "overrideReferences": false,
