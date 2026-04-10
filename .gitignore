@@ -17,6 +17,7 @@ pip-log.txt
 # Bridge server runtime data
 bridge_server/*.db
 bridge_server/sync_exports/
+sync_exports/
 *.db
 
 # ── Unity ───────────────────────────────────────────────────────────────────
