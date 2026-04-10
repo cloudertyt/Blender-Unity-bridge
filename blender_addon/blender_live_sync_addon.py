@@ -930,6 +930,10 @@ class BUBSyncSettings(PropertyGroup):
         max=10.0,
         default=1.0,
     )
+    show_advanced: BoolProperty(  # type: ignore
+        name="Show Advanced",
+        default=False,
+    )
     connection_enabled: BoolProperty(  # type: ignore
         name="Unity Connection",
         default=False,
@@ -1007,16 +1011,17 @@ class BUBSYNC_PT_panel(Panel):
         layout.prop(settings, "server_url")
         layout.prop(settings, "use_selection_only")
         layout.prop(settings, "auto_sync")
+        layout.operator("bubsync.sync_now", icon="MATERIAL", text="Sync Material")
         layout.operator("bubsync.reconnect", icon="FILE_REFRESH")
 
-        adv = layout.box()
-        adv.label(text="Advanced")
-        adv.prop(settings, "debounce_seconds")
-        adv.prop(settings, "publish_retry_seconds")
-
         layout.separator()
-        layout.label(text="Real-time: geometry only (no material)")
-        layout.operator("bubsync.sync_now", icon="MATERIAL", text="Sync Material (Manual)")
+        adv = layout.box()
+        adv.prop(settings, "show_advanced", text="Advanced",
+                 icon="TRIA_DOWN" if settings.show_advanced else "TRIA_RIGHT", emboss=False)
+        if settings.show_advanced:
+            adv.prop(settings, "debounce_seconds")
+            adv.prop(settings, "publish_retry_seconds")
+
         layout.label(text=f"Status: {settings.last_status}")
 
 
