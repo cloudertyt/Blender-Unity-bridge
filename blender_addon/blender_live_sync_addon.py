@@ -895,12 +895,12 @@ class BUBSyncSettings(PropertyGroup):
     bridge_start_script: StringProperty(  # type: ignore
         name="Bridge Start Script",
         subtype="FILE_PATH",
-        default="D:/Code-2/MML_Bridge/start_blender_unity_bridge.ps1",
+        default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "start_blender_unity_bridge.ps1"),
     )
     bridge_python_exe: StringProperty(  # type: ignore
         name="Bridge Python",
         subtype="FILE_PATH",
-        default="D:/Python/python.exe",
+        default="",
     )
     asset_name: StringProperty(  # type: ignore
         name="Asset Name",
