@@ -186,8 +186,8 @@ def _health_check(settings: "BUBSyncSettings", timeout: float = 1.5) -> bool:
 
 
 def _try_start_bridge(settings: "BUBSyncSettings") -> tuple[bool, str]:
-    script = bpy.path.abspath(settings.bridge_start_script)
-    script = os.path.abspath(script)
+    # Auto-locate the start script relative to this addon file
+    script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "start_blender_unity_bridge.ps1")
     if not os.path.isfile(script):
         return False, f"Bridge start script not found: {script}"
 
@@ -196,10 +196,8 @@ def _try_start_bridge(settings: "BUBSyncSettings") -> tuple[bool, str]:
     if os.name == "nt":
         creationflags = subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW
 
+    # Auto-detect Python — prefer system python, fall back to Blender's bundled python
     python_candidates: list[str] = []
-    configured = bpy.path.abspath(settings.bridge_python_exe).strip()
-    if configured:
-        python_candidates.append(configured)
     if sys.executable not in python_candidates:
         python_candidates.append(sys.executable)
 
@@ -1007,9 +1005,6 @@ class BUBSYNC_PT_panel(Panel):
         layout.prop(settings, "connection_enabled")
         layout.label(text=f"Remote: {'Connected' if settings.remote_connected else 'Disconnected'}")
         layout.prop(settings, "server_url")
-        layout.prop(settings, "auto_start_bridge")
-        layout.prop(settings, "bridge_start_script")
-        layout.prop(settings, "bridge_python_exe")
         layout.prop(settings, "asset_name")
         layout.prop(settings, "use_selection_only")
         layout.prop(settings, "auto_sync")
@@ -1053,12 +1048,7 @@ def register():
             funcs = bpy.types.VIEW3D_HT_header._dyn_ui_initialize()
         _view3d_header_registered = False
 
-    if _load_post_handler not in bpy.app.handlers.load_post:
-        bpy.app.handlers.load_post.append(_load_post_handler)
-
     _ensure_timer_registered()
-    # Also trigger auto-connect right now (for when the addon is enabled mid-session)
-    bpy.app.timers.register(_auto_connect_deferred, first_interval=1.5)
     print("[Blender-Unity-Bridge] Add-on registered.")
 
 
@@ -1066,8 +1056,7 @@ def unregister():
     global _topbar_registered, _view3d_header_registered
     if _depsgraph_update in bpy.app.handlers.depsgraph_update_post:
         bpy.app.handlers.depsgraph_update_post.remove(_depsgraph_update)
-    if _load_post_handler in bpy.app.handlers.load_post:
-        bpy.app.handlers.load_post.remove(_load_post_handler)
+
 
     if _topbar_registered and hasattr(bpy.types, "TOPBAR_HT_upper_bar"):
         bpy.types.TOPBAR_HT_upper_bar.remove(_draw_topbar)
