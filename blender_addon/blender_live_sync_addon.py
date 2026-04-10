@@ -1005,7 +1005,6 @@ class BUBSYNC_PT_panel(Panel):
         layout.prop(settings, "connection_enabled")
         layout.label(text=f"Remote: {'Connected' if settings.remote_connected else 'Disconnected'}")
         layout.prop(settings, "server_url")
-        layout.prop(settings, "asset_name")
         layout.prop(settings, "use_selection_only")
         layout.prop(settings, "auto_sync")
         layout.prop(settings, "debounce_seconds")
