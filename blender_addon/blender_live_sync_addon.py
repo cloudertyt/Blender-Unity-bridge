@@ -1007,9 +1007,12 @@ class BUBSYNC_PT_panel(Panel):
         layout.prop(settings, "server_url")
         layout.prop(settings, "use_selection_only")
         layout.prop(settings, "auto_sync")
-        layout.prop(settings, "debounce_seconds")
-        layout.prop(settings, "publish_retry_seconds")
         layout.operator("bubsync.reconnect", icon="FILE_REFRESH")
+
+        adv = layout.box()
+        adv.label(text="Advanced")
+        adv.prop(settings, "debounce_seconds")
+        adv.prop(settings, "publish_retry_seconds")
 
         layout.separator()
         layout.label(text="Real-time: geometry only (no material)")
