@@ -1,5 +1,5 @@
 bl_info = {
-    "name": "Unity Connection",
+    "name": "Unity Bridge",
     "author": "Codex",
     "version": (0, 5, 0),
     "blender": (4, 0, 0),
@@ -998,7 +998,7 @@ class BUBSYNC_PT_panel(Panel):
     bl_idname = "BUBSYNC_PT_panel"
     bl_space_type = "VIEW_3D"
     bl_region_type = "UI"
-    bl_category = "Blender-Unity"
+    bl_category = "Unity Bridge"
 
     def draw(self, context):
         layout = self.layout
